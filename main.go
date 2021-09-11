@@ -1,13 +1,15 @@
 package main
 
 import (
-	"fmt"
-	"io/ioutil"
+	"context"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
 	"strconv"
+	"time"
 
-	"github.com/gorilla/mux"
+	"github.com/OlyaIvanovs/go_microservice/handlers"
 	"github.com/kelseyhightower/envconfig"
 )
 
@@ -20,46 +22,44 @@ func main() {
 	if err != nil {
 		log.Printf("Failed to parse command line arguments: %s", err.Error())
 	}
-
-	r := mux.NewRouter()
-
-	routes := []struct {
-		route   string
-		handler func(http.ResponseWriter, *http.Request)
-		method  string
-	}{
-		{
-			route:   "/",
-			method:  "GET",
-			handler: handleGetHello,
-		}, {
-			route:   "/goodbye",
-			method:  "GET",
-			handler: handleGetGoodbye,
-		}}
-
-	for _, p := range routes {
-		r.HandleFunc(p.route, p.handler).Methods(p.method)
-	}
-
 	port := strconv.Itoa(opt.Port)
 	log.Println(port)
 
-	http.ListenAndServe(":"+port, r)
-}
+	// Logger
+	l := log.New(os.Stdout, "product-api", log.LstdFlags)
 
-func handleGetHello(w http.ResponseWriter, r *http.Request) {
-	log.Println("Hello world!")
-	d, err := ioutil.ReadAll(r.Body)
+	// Handlers
+	hh := handlers.NewHello(l)
+	gh := handlers.NewGoodbye(l)
 
-	if err != nil {
-		http.Error(w, "Oops", http.StatusBadRequest)
-		return
+	// ServerMux
+	sm := http.NewServeMux()
+	sm.Handle("/", hh)
+	sm.Handle("/goodbye", gh)
+
+	// Server
+	s := &http.Server{
+		Addr:         ":" + port,
+		Handler:      sm,
+		IdleTimeout:  120 * time.Second,
+		ReadTimeout:  1 * time.Second,
+		WriteTimeout: 1 * time.Second,
 	}
 
-	fmt.Fprintf(w, "Hello %s", d)
-}
+	go func() {
+		err := s.ListenAndServe()
+		if err != nil {
+			l.Fatal(err)
+		}
+	}()
 
-func handleGetGoodbye(w http.ResponseWriter, r *http.Request) {
-	log.Println("Goodbye world!")
+	sigChan := make(chan os.Signal)
+	signal.Notify(sigChan, os.Interrupt)
+	signal.Notify(sigChan, os.Kill)
+
+	sig := <-sigChan
+	l.Println("Recieved terminate, graceful shutdown", sig)
+
+	tc, _ := context.WithTimeout(context.Background(), 30*time.Second)
+	s.Shutdown(tc)
 }
