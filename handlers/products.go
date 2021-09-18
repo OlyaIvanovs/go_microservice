@@ -1,17 +1,3 @@
-// Package classification of Product API
-//
-// Documentation for Product API
-//
-// Schemes: http
-// BasePath: /
-// Version: 1.0.0
-//
-// Consumes:
-// -application/json
-//
-// Produces:
-// -application/json
-// swagger:meta
 package handlers
 
 import (
@@ -25,22 +11,9 @@ import (
 	"github.com/gorilla/mux"
 )
 
-// A list of products returns in the response.
-// swagger:response productsResponse
-type productsResponseWrapper struct {
-	// All products in the system
-	// in: body
-	Body []data.Product
-}
-
 // Products is a http.Handler
 type Products struct {
 	l *log.Logger
-}
-
-// GenericError is a generic error message returned by a server
-type GenericError struct {
-	Message string `json:"message"`
 }
 
 type KeyProduct struct{}
@@ -48,6 +21,11 @@ type KeyProduct struct{}
 // NewProducts creates a products handler with the given logger
 func NewProducts(l *log.Logger) *Products {
 	return &Products{l}
+}
+
+// GenericError is a generic error message returned by a server
+type GenericError struct {
+	Message string `json:"message"`
 }
 
 // swagger:route GET /products products listProducts
@@ -67,6 +45,15 @@ func (p *Products) GetProducts(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// swagger:route POST /products products createProduct
+// Create a new product
+//
+// responses:
+// 200: productResponse
+// 422: errorValidation
+// 501: error Response
+
+// AddProduct handles POST requests to add new products
 func (p *Products) AddProduct(w http.ResponseWriter, r *http.Request) {
 	p.l.Println("Handle POST products")
 
@@ -76,6 +63,13 @@ func (p *Products) AddProduct(w http.ResponseWriter, r *http.Request) {
 	data.AddProduct(prod)
 }
 
+// swagger:route PUT /products products updateProduct
+// Update a products details
+//
+// responses:
+//	201: noContentResponse
+//  404: errorResponse
+//  422: errorValidation
 func (p *Products) UpdateProducts(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, err := strconv.Atoi(vars["id"])
@@ -101,6 +95,14 @@ func (p *Products) UpdateProducts(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// swagger:route DELETE /products/{id} products deleteProduct
+// Returns a list of products
+// responses:
+// 	204: noContentResponse
+//  404: errorResponse
+//  501: errorResponse
+
+// DeleteProducts delete a product from the database
 func (p *Products) DeleteProduct(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, err := strconv.Atoi(vars["id"])
@@ -109,7 +111,7 @@ func (p *Products) DeleteProduct(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Unable to convert id", http.StatusBadRequest)
 	}
 
-	p.l.Println("Handle DELETE products", id)
+	p.l.Println("Handle DELETE product", id)
 
 	e := data.DeleteProduct(id)
 
