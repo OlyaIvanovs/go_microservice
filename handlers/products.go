@@ -27,7 +27,7 @@ import (
 
 // A list of products returns in the response.
 // swagger:response productsResponse
-type productsResponse struct {
+type productsResponseWrapper struct {
 	// All products in the system
 	// in: body
 	Body []data.Product
@@ -37,6 +37,13 @@ type productsResponse struct {
 type Products struct {
 	l *log.Logger
 }
+
+// GenericError is a generic error message returned by a server
+type GenericError struct {
+	Message string `json:"message"`
+}
+
+type KeyProduct struct{}
 
 // NewProducts creates a products handler with the given logger
 func NewProducts(l *log.Logger) *Products {
@@ -54,7 +61,7 @@ func (p *Products) GetProducts(w http.ResponseWriter, r *http.Request) {
 	lp := data.GetProducts()
 
 	// d, err := json.Marshal(lp) - second option
-	err := lp.ToJSON(w)
+	err := data.ToJSON(lp, w)
 	if err != nil {
 		http.Error(w, "unable to marshal json", http.StatusInternalServerError)
 	}
@@ -66,7 +73,7 @@ func (p *Products) AddProduct(w http.ResponseWriter, r *http.Request) {
 	prod := r.Context().Value(KeyProduct{}).(data.Product)
 
 	p.l.Printf("Prod: %#v", prod)
-	data.AddProduct(&prod)
+	data.AddProduct(prod)
 }
 
 func (p *Products) UpdateProducts(w http.ResponseWriter, r *http.Request) {
@@ -94,12 +101,44 @@ func (p *Products) UpdateProducts(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-type KeyProduct struct{}
+func (p *Products) DeleteProduct(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, err := strconv.Atoi(vars["id"])
 
+	if err != nil {
+		http.Error(w, "Unable to convert id", http.StatusBadRequest)
+	}
+
+	p.l.Println("Handle DELETE products", id)
+
+	e := data.DeleteProduct(id)
+
+	if e == data.ErrProductNotFound {
+		p.l.Println("ERROR: deleting record id does not exist")
+
+		w.WriteHeader(http.StatusNotFound)
+		data.ToJSON(&GenericError{Message: err.Error()}, w)
+		return
+	}
+
+	if err != nil {
+		p.l.Println("ERROR: deleting record", err)
+
+		w.WriteHeader(http.StatusInternalServerError)
+		data.ToJSON(&GenericError{Message: err.Error()}, w)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+
+}
+
+// MiddlewareValidateProduct validates the product in the request and calls next if ok
 func (p *Products) MiddlewareValidateProduct(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		prod := data.Product{}
-		err := prod.FromJSON(r.Body)
+
+		err := data.FromJSON(&prod, r.Body)
 		if err != nil {
 			p.l.Println("[ERROR] deserializing product", err)
 			http.Error(w, "Unable to unmarshal json", http.StatusBadRequest)

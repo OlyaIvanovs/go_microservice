@@ -1,13 +1,11 @@
 package data
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
 	"regexp"
 	"time"
 
-	validator"github.com/go-playground/validator/v10"
+	validator "github.com/go-playground/validator/v10"
 )
 
 type Product struct {
@@ -21,10 +19,7 @@ type Product struct {
 	DeletedOn   string  `json:"-"`
 }
 
-func (p *Product) FromJSON(r io.Reader) error {
-	e := json.NewDecoder(r)
-	return e.Decode(p)
-}
+type Products []*Product
 
 func (p *Product) Validate() error {
 	validate := validator.New()
@@ -45,49 +40,53 @@ func validateSKU(fl validator.FieldLevel) bool {
 	return true
 }
 
-type Products []*Product
+var ErrProductNotFound = fmt.Errorf("Product not found")
 
-func (p *Products) ToJSON(w io.Writer) error {
-	e := json.NewEncoder(w)
-	return e.Encode(p)
+func findIndexByProductId(id int) int {
+	for i, p := range productList {
+		if p.ID == id {
+			return i
+		}
+	}
+
+	return -1
+}
+
+func getNextID() int {
+	lp := productList[len(productList)-1]
+	return lp.ID + 1
 }
 
 func GetProducts() Products {
 	return productList
 }
 
-func AddProduct(p *Product) {
+func AddProduct(p Product) {
 	p.ID = getNextID()
-	productList = append(productList, p)
+	productList = append(productList, &p)
 }
 
 func UpdateProduct(id int, p *Product) error {
-	_, pos, err := findProduct(id)
-	if err != nil {
-		return err
+	i := findIndexByProductId(id)
+	if id == -1 {
+		return ErrProductNotFound
 	}
-
-	p.ID = id
-	productList[pos] = p
-
+	productList[i] = p
 	return nil
 }
 
-var ErrProductNotFound = fmt.Errorf("Product not found")
-
-func findProduct(id int) (*Product, int, error) {
-	for i, p := range productList {
-		if p.ID == id {
-			return p, i, nil
-		}
+func DeleteProduct(id int) error {
+	i := findIndexByProductId(id)
+	if i == -1 {
+		return ErrProductNotFound
 	}
 
-	return nil, -1, ErrProductNotFound
-}
-
-func getNextID() int {
-	lp := productList[len(productList)-1]
-	return lp.ID + 1
+	if (i + 1) == len(productList) {
+		productList = productList[:i]
+	} else {
+		productList = append(productList[:i], productList[i+1:]...)
+	}
+	return nil
 }
 
 var productList = []*Product{
